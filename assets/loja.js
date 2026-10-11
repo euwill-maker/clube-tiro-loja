@@ -18,6 +18,17 @@
   function waUrl(text) { return 'https://wa.me/' + C.whatsapp + '?text=' + encodeURIComponent(text); }
   function plural(n, a, b) { return n + ' ' + (n === 1 ? a : b); }
   P.forEach(function (p) { p._s = norm([p.n, p.m, p.cod, catName[p.c]].join(' ')); });
+  // Sem valores na loja (C.mostrarPrecos === false): os preços não aparecem e o pedido vira orçamento no WhatsApp.
+  var SP = C.mostrarPrecos === false;
+  // "Mais relevantes": as categorias se alternam, começando pelos itens mais tops de cada uma (a vitrine fica variada,
+  // em vez de 24 lunetas seguidas, que é a ordem do catálogo do fornecedor).
+  var VITRINE = ['red-dot-pistola', 'lunetas', 'lanternas', 'red-dot-longa', 'observacao', 'coronhas', 'bipes', 'magnifier', 'montagens', 'carregadores', 'cuidados', 'colimadores'];
+  (function () {
+    var filas = {}, cats = VITRINE.concat(CATS.map(function (c) { return c.id; }).filter(function (id) { return VITRINE.indexOf(id) < 0; }));
+    cats.forEach(function (c) { filas[c] = P.filter(function (p) { return p.c === c; }).sort(function (a, b) { return (b.pix || b.card || 0) - (a.pix || a.card || 0); }); });
+    var pos = 0, resto = true;
+    while (resto) { resto = false; cats.forEach(function (c) { var p = filas[c].shift(); if (p) { p._rel = pos++; resto = true; } }); }
+  })();
 
   // ---------- métricas (só liga com ID no config) ----------
   function track(ev, data) {
@@ -72,18 +83,20 @@
     if (S.sort === 'menor') l.sort(function (a, b) { return price(a) - price(b); });
     else if (S.sort === 'maior') l.sort(function (a, b) { return (b.pix || 0) - (a.pix || 0); });
     else if (S.sort === 'az') l.sort(function (a, b) { return a.n.localeCompare(b.n, 'pt-BR'); });
+    else l.sort(function (a, b) { return a._rel - b._rel; });
     return l;
   }
 
   // ---------- render ----------
   function priceHtml(p, big) {
+    if (SP) return '<p class="price-ask">Valor no WhatsApp</p>';
     if (p.pix == null) return '<p class="price-ask">Preço sob consulta</p>';
     return '<p class="price-pix">' + money(p.pix) + '<small>no PIX</small></p>' +
       '<p class="price-card">ou ' + PARC + 'x de ' + money(p.card / PARC) + (big ? ' sem juros (' + money(p.card) + ' no cartão)' : '') + '</p>';
   }
   function cardHtml(p) {
     var inCart = cart[p.id] > 0;
-    var add = p.pix == null
+    var add = p.pix == null && !SP
       ? '<a class="card-add" href="' + waUrl('Olá! Quero saber o preço e o prazo de: ' + p.n + ' (' + p.m + ', cód. ' + p.cod + ').') + '" target="_blank" rel="noopener" data-ask="' + p.id + '"><svg class="i i-fill" aria-hidden="true"><use href="#i-wa"/></svg>Consultar</a>'
       : '<button class="card-add' + (inCart ? ' in' : '') + '" type="button" data-add="' + p.id + '" aria-label="Adicionar ' + esc(p.n) + ' ao pedido"><svg class="i" aria-hidden="true"><use href="#i-' + (inCart ? 'cart' : 'plus') + '"/></svg>' + (inCart ? 'No pedido (' + cart[p.id] + ')' : 'Adicionar') + '</button>';
     return '<li class="card"><button class="card-hit" type="button" data-open="' + p.id + '">' +
@@ -148,7 +161,7 @@
     $('#cartOpen').setAttribute('aria-label', 'Ver pedido (' + plural(t.n, 'item', 'itens') + ')');
     $('#cartbar').hidden = !t.n; document.body.classList.toggle('has-cartbar', !!t.n);
     $('#cartbarN').textContent = plural(t.n, 'item', 'itens') + ' no pedido';
-    $('#cartbarTotal').textContent = t.pix ? money(t.pix) + ' no PIX' + (t.ask ? ' + a consultar' : '') : 'preço a consultar';
+    $('#cartbarTotal').textContent = SP ? 'orçamento no WhatsApp' : t.pix ? money(t.pix) + ' no PIX' + (t.ask ? ' + a consultar' : '') : 'preço a consultar';
     // botões dos cards visíveis
     document.querySelectorAll('[data-add]').forEach(function (b) {
       var id = b.getAttribute('data-add'), n = cart[id] || 0;
@@ -168,9 +181,10 @@
       return '<li class="c-item"><button class="c-thumb" type="button" data-open="' + p.id + '" aria-label="Ver ' + esc(p.n) + '" style="border:0;padding:0;cursor:pointer"><img src="' + img(p) + '" alt="" loading="lazy"></button><div>' +
         '<p class="c-name">' + esc(p.n) + '</p><p class="c-meta">' + esc(p.m) + ' · cód. ' + esc(p.cod) + '</p>' +
         '<div class="c-row"><div class="qty"><button type="button" data-qty="' + p.id + '" data-d="-1" aria-label="Diminuir"><svg class="i" aria-hidden="true"><use href="#i-' + (x.q > 1 ? 'minus' : 'trash') + '"/></svg></button><output>' + x.q + '</output><button type="button" data-qty="' + p.id + '" data-d="1" aria-label="Aumentar"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></button></div>' +
-        '<span class="c-sub">' + (p.pix == null ? 'a consultar' : money(p.pix * x.q)) + '</span></div></div></li>';
+        '<span class="c-sub">' + (SP ? '' : p.pix == null ? 'a consultar' : money(p.pix * x.q)) + '</span></div></div></li>';
     }).join('') + '</ul>';
-    h += '<div class="c-sum"><div class="tot"><span>Total no PIX</span><span>' + money(t.pix) + '</span></div>' +
+    if (SP) h += '<div class="c-sum"><div class="card-tot"><span>Valores, prazo e frete</span><span>o clube passa no WhatsApp</span></div></div>';
+    else h += '<div class="c-sum"><div class="tot"><span>Total no PIX</span><span>' + money(t.pix) + '</span></div>' +
       (t.card ? '<div class="card-tot"><span>No cartão (até ' + PARC + 'x sem juros)</span><span>' + money(t.card) + '</span></div>' : '') +
       (t.ask ? '<div class="card-tot"><span>' + plural(t.ask, 'item', 'itens') + ' com preço a consultar</span><span>—</span></div>' : '') +
       '<div class="card-tot"><span>Frete / retirada</span><span>combinado no WhatsApp</span></div></div>';
@@ -180,25 +194,26 @@
       '<label>Como prefere receber<select id="cEntrega"><option>Retirar no clube</option><option' + (who.entrega === 'Receber em casa' ? ' selected' : '') + '>Receber em casa</option></select></label>' +
       '</form>';
     $('#cartBody').innerHTML = h;
-    $('#cartFoot').innerHTML = '<button class="btn btn-wa btn-block" type="button" id="cSend"><svg class="i i-fill" aria-hidden="true"><use href="#i-wa"/></svg>Enviar pedido no WhatsApp</button><p class="c-hint">Sob encomenda: o clube confirma prazo, frete e pagamento na conversa.</p>';
+    $('#cartFoot').innerHTML = '<button class="btn btn-wa btn-block" type="button" id="cSend"><svg class="i i-fill" aria-hidden="true"><use href="#i-wa"/></svg>' + (SP ? 'Pedir orçamento no WhatsApp' : 'Enviar pedido no WhatsApp') + '</button><p class="c-hint">Sob encomenda: o clube confirma prazo, frete e pagamento na conversa.</p>';
   }
   function sendOrder() {
     var nome = $('#cNome').value.trim(), cidade = $('#cCidade').value.trim(), entrega = $('#cEntrega').value;
     $('#cNome').classList.toggle('err', !nome); $('#cCidade').classList.toggle('err', !cidade);
     if (!nome || !cidade) { (nome ? $('#cCidade') : $('#cNome')).focus(); toast('Preencha nome e cidade'); return; }
     store('slo-loja-cliente', { nome: nome, cidade: cidade, entrega: entrega });
-    var t = totals(), lines = ['Olá! Quero fazer este pedido na loja do clube:', ''];
+    var t = totals(), lines = [SP ? 'Olá! Quero um orçamento destes itens da loja do clube:' : 'Olá! Quero fazer este pedido na loja do clube:', ''];
     cartList().forEach(function (x, i) {
-      lines.push((i + 1) + ') ' + x.q + 'x ' + x.p.n + ' — ' + x.p.m + ', cód. ' + x.p.cod + (x.p.pix == null ? ' — preço a consultar' : ' — ' + money(x.p.pix * x.q)));
+      lines.push((i + 1) + ') ' + x.q + 'x ' + x.p.n + ' — ' + x.p.m + ', cód. ' + x.p.cod + (SP ? '' : x.p.pix == null ? ' — preço a consultar' : ' — ' + money(x.p.pix * x.q)));
     });
     lines.push('');
-    if (t.pix) lines.push('Total no PIX: ' + money(t.pix) + ' (ou ' + money(t.card) + ' no cartão em até ' + PARC + 'x)');
-    if (t.ask) lines.push(plural(t.ask, 'item', 'itens') + ' com preço a consultar.');
+    if (!SP && t.pix) lines.push('Total no PIX: ' + money(t.pix) + ' (ou ' + money(t.card) + ' no cartão em até ' + PARC + 'x)');
+    if (!SP && t.ask) lines.push(plural(t.ask, 'item', 'itens') + ' com preço a consultar.');
     lines.push('Entrega: ' + entrega.toLowerCase());
     lines.push('Nome: ' + nome);
     lines.push('Cidade: ' + cidade);
     lines.push('');
-    lines.push('Pode me confirmar o prazo' + (entrega === 'Receber em casa' ? ', o frete' : '') + ' e a forma de pagamento?');
+    lines.push(SP ? 'Pode me passar os valores, o prazo' + (entrega === 'Receber em casa' ? ', o frete' : '') + ' e a forma de pagamento?'
+      : 'Pode me confirmar o prazo' + (entrega === 'Receber em casa' ? ', o frete' : '') + ' e a forma de pagamento?');
     track('Lead', { value: t.pix, currency: 'BRL', num_items: t.n });
     window.open(waUrl(lines.join('\n')), '_blank', 'noopener');
   }
@@ -258,7 +273,7 @@
   }
   function renderProdFoot(p) {
     var ask = 'Olá! Tenho uma dúvida sobre: ' + p.n + ' (' + p.m + ', cód. ' + p.cod + ').';
-    if (p.pix == null) {
+    if (p.pix == null && !SP) {
       $('#prodFoot').innerHTML = '<a class="btn btn-wa btn-block" href="' + waUrl('Olá! Quero saber o preço e o prazo de: ' + p.n + ' (' + p.m + ', cód. ' + p.cod + ').') + '" target="_blank" rel="noopener"><svg class="i i-fill" aria-hidden="true"><use href="#i-wa"/></svg>Consultar preço no WhatsApp</a>';
       return;
     }
@@ -334,6 +349,11 @@
   $('#emptyWa').target = '_blank';
   document.querySelectorAll('.js-parc').forEach(function (el) { el.textContent = PARC; });
   $('#previewBar').hidden = !C.preview;
+  // Sem valores: some a ordem por preço e o filtro de faixa de preço.
+  if (SP) {
+    document.querySelectorAll('#sort option[value="menor"], #sort option[value="maior"]').forEach(function (o) { o.remove(); });
+    var fp = $('#fPrices'); if (fp) fp.closest('fieldset').hidden = true;
+  }
 
   render();
   updateCartUi();
