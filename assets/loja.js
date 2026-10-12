@@ -258,7 +258,7 @@
     var h = '<div class="p-img"><img src="' + img(p, true) + '" alt="' + esc(p.n) + '" width="900" height="900"></div>' +
       '<div class="p-main"><p class="p-brand">' + esc(p.m) + '</p><h2 class="p-name" id="prodName">' + esc(p.n) + '</h2><p class="p-code">Código ' + esc(p.cod) + ' · ' + esc(catName[p.c]) + '</p>' +
       '<div class="p-price">' + priceHtml(p, true) + '</div></div>' +
-      '<p class="p-note"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg><span><b>Sob encomenda.</b> O clube pede ao fornecedor depois que você fecha: prazo e frete confirmados no WhatsApp.' +
+      '<p class="p-note"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg><span><b>Escolha com quem é do tiro.</b> Chame o clube no WhatsApp: a gente tira suas dúvidas, confirma se o equipamento serve na sua arma e já passa prazo e frete.' +
       (p.c === 'carregadores' ? ' Para carregadores, o atendimento confirma se é preciso apresentar seu registro.' : '') + '</span></p>';
     if (p.d) h += '<div class="p-sec"><h3>Sobre o produto</h3><p class="p-desc">' + esc(p.d) + '</p></div>';
     if (p.s.length) h += '<div class="p-sec"><h3>Especificações</h3><ul class="specs">' + p.s.map(specRow).join('') + '</ul></div>';
